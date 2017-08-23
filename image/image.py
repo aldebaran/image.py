@@ -13,14 +13,23 @@ presence of PySide and/or cv2 to perform its functions and is only defined if
 those packages are available.
 """
 
-import fx.optional as optional
-# Standard Library
+# Standard libraries
 import collections
 import os
-# Third-parties
+
+# Third-party libraries
+try:
+	import cv2
+	_has_CV = True
+except ImportError:
+	_has_CV = False
+
 import numpy as numpy
-if optional.PySide: from PySide.QtGui import QPixmap, QImage
-if optional.cv2: import cv2
+try:
+	from Qt.QtGui import QPixmap, QImage
+	_has_Qt = True
+except ImportError:
+	_has_Qt = False
 
 # ──────────────────────── Embedded vision definitions ─────────────────────── #
 
@@ -202,182 +211,175 @@ class Colorspace:
 
 # ──────────────────────────────── Image class ─────────────────────────────── #
 
-OPERATIONS_AVAILABLE = optional.PySide or optional.cv2
-if OPERATIONS_AVAILABLE:
-	class Image(object):
+class Image(object):
+	"""
+	Image serialization, framework and colorspace conversion facilities.
+
+	Conversion is supported between the ALImage, CVImage and QImage frameworks/
+	classes.
+
+	This module depends on the presence of either PySide or cv2, as there would be
+	no possibility to convert anything without either, and basic image reading/
+	writing or color conversion would be impossible.
+	"""
+
+	def __init__(self, image = None, image_type = None):
+		self.image  = image # Keep a pointer on the object to keep it alive
+
+		if image is None or image_type is not None:
+			return
+
+		# The type was unspecified and we have an image object; determine what kind of
+		# object and what to do with it
+		if Image.isALImage(image):
+			self._type = "ALImage"
+		elif Image.isCVImage(image):
+			# We assume the image is BGR as per OpenCV assumptions
+			self._type = "CVImage"
+		elif Image.isQImage(image):
+			# We assume the image is RGB as per Qt assumptions
+			self.image = image.rgbSwapped()
+			self._type = "QImage"
+		elif Image.isImagePath(image):
+			self.load(image)
+		else:
+			raise RuntimeError("Wrong image type %s" % type(image))
+
+	# ──────────
+	# Properties
+
+	@property
+	def data(self):
+		if self.type == "ALImage":
+			return self.image[6]
+		elif self.type == "QImage":
+			return self.image.bits()
+		elif self.type == "CVImage":
+			return self.image.data
+		else:
+			return None
+
+	@property
+	def width(self):
+		if self.type == "ALImage":
+			return self.image[0]
+		elif self.type == "QImage":
+			return self.image.width()
+		elif self.type == "CVImage":
+			return self.image.shape[1]
+		else:
+			return None
+
+	@property
+	def height(self):
+		if self.type == "ALImage":
+			return self.image[1]
+		elif self.type == "QImage":
+			return self.image.height()
+		elif self.type == "CVImage":
+			return self.image.shape[0]
+		else:
+			return None
+
+	@property
+	def depth(self):
 		"""
-		Image serialization, framework and colorspace conversion facilities.
-
-		Conversion is supported between the ALImage, CVImage and QImage frameworks/
-		classes.
-
-		This module depends on the presence of either PySide or cv2, as there would be
-		no possibility to convert anything without either, and basic image reading/
-		writing or color conversion would be impossible.
-
-		Safe usage must thus be guarded by a test, e.g.:
-
-		import fx.image
-
-		if fx.image.OPERATIONS_AVAILABLE:
-			fx.image.Image("Interesting.png")
+		Number of channels.
 		"""
-
-		def __init__(self, image = None, image_type = None):
-			self.image  = image # Keep a pointer on the object to keep it alive
-
-			if image is None or image_type is not None:
-				return
-
-			# The type was unspecified and we have an image object; determine what kind of
-			# object and what to do with it
-			if Image.isALImage(image):
-				self._type = "ALImage"
-			elif Image.isCVImage(image):
-				# We assume the image is BGR as per OpenCV assumptions
-				self._type = "CVImage"
-			elif Image.isQImage(image):
-				# We assume the image is RGB as per Qt assumptions
-				self.image = image.rgbSwapped()
-				self._type = "QImage"
-			elif Image.isImagePath(image):
-				self.load(image)
+		if self.type == "ALImage":
+			return self.colorspace.depth
+		elif self.type == "QImage":
+			# QImages can only contain integers
+			return self.image.depth() / 8
+		elif self.type == "CVImage":
+			if len(self.image.shape) == 3:
+				return self.image.shape[2]
 			else:
-				raise RuntimeError("Wrong image type %s" % type(image))
+				return 1
+		else:
+			return None
 
-		# ──────────
-		# Properties
-
-		@property
-		def data(self):
-			if self.type == "ALImage":
-				return self.image[6]
-			elif self.type == "QImage":
-				return self.image.bits()
-			elif self.type == "CVImage":
-				return self.image.data
+	@property
+	def sampleDepth(self):
+		if self.type == "ALImage":
+			return self.image[2]
+		elif self.type == "QImage":
+			return self.image.depth() / 8
+		elif self.type == "CVImage":
+			if len(self.image.shape) == 3:
+				return self.image.shape[2]
 			else:
-				return None
+				return 1
+		else:
+			return None
 
-		@property
-		def width(self):
-			if self.type == "ALImage":
-				return self.image[0]
-			elif self.type == "QImage":
-				return self.image.width()
-			elif self.type == "CVImage":
-				return self.image.shape[1]
-			else:
-				return None
-
-		@property
-		def height(self):
-			if self.type == "ALImage":
-				return self.image[1]
-			elif self.type == "QImage":
-				return self.image.height()
-			elif self.type == "CVImage":
-				return self.image.shape[0]
-			else:
-				return None
-
-		@property
-		def depth(self):
-			"""
-			Number of channels.
-			"""
-			if self.type == "ALImage":
-				return self.colorspace.depth
-			elif self.type == "QImage":
-				# QImages can only contain integers
-				return self.image.depth() / 8
-			elif self.type == "CVImage":
-				if len(self.image.shape) == 3:
-					return self.image.shape[2]
-				else:
-					return 1
-			else:
-				return None
-
-		@property
-		def sampleDepth(self):
-			if self.type == "ALImage":
-				return self.image[2]
-			elif self.type == "QImage":
-				return self.image.depth() / 8
-			elif self.type == "CVImage":
-				if len(self.image.shape) == 3:
-					return self.image.shape[2]
-				else:
-					return 1
-			else:
-				return None
-
-		@property
-		def _sampleType(self):
-			"""
-			Numpy sample type.
-			"""
-			if self.type == "ALImage":
-				return self.colorspace._type
-			elif self.type == "QImage":
-				return self.colorspace._type
-			elif self.type == "CVImage":
-				return self.image.dtype
-			else:
-				return None
+	@property
+	def _sampleType(self):
+		"""
+		Numpy sample type.
+		"""
+		if self.type == "ALImage":
 			return self.colorspace._type
+		elif self.type == "QImage":
+			return self.colorspace._type
+		elif self.type == "CVImage":
+			return self.image.dtype
+		else:
+			return None
+		return self.colorspace._type
 
-		@property
-		def resolution(self):
-			return Resolution((self.width, self.height))
+	@property
+	def resolution(self):
+		return Resolution((self.width, self.height))
 
-		@property
-		def colorspace(self):
-			if self.type == "ALImage":
-				return Colorspace(self.image[3])
-			elif self.type == "QImage":
-				return Colorspace("RGB")
-			elif self.type == "CVImage":
-				if self.depth == 3:
-					return Colorspace("BGR")
-				elif self.depth == 1:
-					return Colorspace("Gray")
-			else:
-				return None
+	@property
+	def colorspace(self):
+		if self.type == "ALImage":
+			return Colorspace(self.image[3])
+		elif self.type == "QImage":
+			return Colorspace("RGB")
+		elif self.type == "CVImage":
+			if self.depth == 3:
+				return Colorspace("BGR")
+			elif self.depth == 1:
+				return Colorspace("Depth")
+		else:
+			return None
 
-		@property
-		def type(self):
-			assert(any([self._type == t for t in ["ALImage", "QImage", "CVImage"]]))
-			return self._type
+	@property
+	def type(self):
+		assert(any([self._type == t for t in ["ALImage", "QImage", "CVImage"]]))
+		return self._type
 
-		# ─────────────────────
-		# Conversion Properties
+	# ─────────────────────
+	# Conversion Properties
 
-		# Zero-copy conversions, which are thus closer to properties than costly
-		# functions
+	# Zero-copy conversions, which are thus closer to properties than costly
+	# functions
 
+	@property
+	def numpy_image(self):
+		return numpy.frombuffer(self.data, self._sampleType).reshape(self.height,
+		                                                             self.width,
+		                                                             self.depth)
+
+	if _has_CV:
 		@property
 		def cv_image(self):
-			return numpy.frombuffer(self.data, self._sampleType).reshape(self.height,
-			                                                             self.width,
-			                                                             self.depth)
+			return self.numpy_image
 
-		@property
-		def numpy_image(self):
-			return self.cv_image
-
+	if _has_Qt:
 		@property
 		def qimage(self):
 			if self.type == "QImage":
 				return self
 
 			# Note: QImages can only contain integer images; render them if not integer
-			if (self.colorspace not in [Colorspace("RGB"), Colorspace("BGR")]
+			if (self.colorspace not in [Colorspace("BGR"), Colorspace("RGB")]
 			 or self._sampleType != numpy.uint8
 			 or self.sampleDepth != 3
 			 or       self.depth != 3):
-				raise ValueError("Can only wrap RGB888 images with QImage")
+				return self.render().qimage
 
 			rgb_image =  QImage(self.data,
 						        self.width, self.height, self.depth*self.width,
@@ -387,199 +389,199 @@ if OPERATIONS_AVAILABLE:
 			elif self.colorspace == Colorspace("BGR"):
 				return rgb_image.rgbSwapped()
 
-		# ────────────────────────
-		# Image-type determination
+	# ────────────────────────
+	# Image-type determination
 
-		@staticmethod
-		def isALImage(o):
-			return isinstance(o,list) and len(o)==12
+	@staticmethod
+	def isALImage(o):
+		return isinstance(o,list) and len(o)==12
 
-		@staticmethod
-		def isCVImage(o):
-			return isinstance(o,numpy.ndarray)
+	@staticmethod
+	def isCVImage(o):
+		return isinstance(o,numpy.ndarray)
 
-		@staticmethod
-		def isQImage(o):
-			if optional.PySide:
-				return isinstance(o, QImage)
-			else:
-				return False
+	@staticmethod
+	def isQImage(o):
+		if _has_Qt:
+			return isinstance(o, QImage)
+		else:
+			return False
 
-		@staticmethod
-		def isImagePath(o):
-			return isinstance(o, basestring) and os.path.isfile(o)
+	@staticmethod
+	def isImagePath(o):
+		return isinstance(o, basestring) and os.path.isfile(o)
 
-		# ───────────
-		# General API
+	# ───────────
+	# General API
 
-		def render(self):
-			if self.colorspace == Colorspace("BGR"):
-				return self
-			elif not optional.cv2:
-				raise RuntimeError("cv2 needed to perform color conversions")
-			elif self.colorspace == Colorspace("Yuv"):
-				return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
-			elif self.colorspace == Colorspace("yUv"):
-				return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
-			elif self.colorspace == Colorspace("yuV"):
-				return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
-			elif self.colorspace == Colorspace("Rgb"):
-				rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
-				rgb_image[:,:,2] = self.numpy_image[:,:,0]
-				return Image(rgb_image)
-			elif self.colorspace == Colorspace("rGb"):
-				rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
-				rgb_image[:,:,1] = self.numpy_image[:,:,0]
-				return Image(rgb_image)
-			elif self.colorspace == Colorspace("rgB"):
-				rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
-				rgb_image[:,:,0] = self.numpy_image[:,:,0]
-				return Image(rgb_image)
-			elif self.colorspace == Colorspace("Hsy"):
-				return self
-			elif self.colorspace == Colorspace("hSy"):
-				return self
-			elif self.colorspace == Colorspace("hsY"):
-				return self
-			elif self.colorspace == Colorspace("YUV422"):
-				return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_YUV2BGR_YUYV))
-			elif self.colorspace == Colorspace("YUV"):
-				return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_YCrCb2RGB))
-			elif self.colorspace == Colorspace("RGB"):
-				return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_RGB2BGR))
-			elif self.colorspace == Colorspace("HSY"):
-				# TODO Implement but need some HSY documentation
-				raise NotImplementedError
-			elif self.colorspace == Colorspace("YYCbCr"):
-				raw = numpy.ravel(self.numpy_image)
-				yuv422 = numpy.empty(raw.shape,raw.dtype)
-				# Reorder yyuv into yuyv per 2-pixel/4-byte block
-				yuv422[0::4] = raw[0::4] # Y1 🡒 Y1
-				yuv422[1::4] = raw[2::4] # Y2 🡖 Cb
-				yuv422[2::4] = raw[1::4] # Cb 🡕 Y2
-				yuv422[3::4] = raw[3::4] # Cr 🡒 Cr
-				return Image(cv2.cvtColor(yuv422.reshape(self.numpy_image.shape), cv2.COLOR_YUV2BGR_YUYV))
-			elif self.colorspace == Colorspace("H2RGB"):
-				# TODO Implement but need some HSY documentation
-				raise NotImplementedError
-			elif self.colorspace == Colorspace("HSMixed"):
-				# TODO Implement but need some HSY documentation
-				raise NotImplementedError
-			elif self.colorspace == Colorspace("Depth"):
-				return Image.__render1ChannelUint16(self)
-			elif self.colorspace == Colorspace("ARGB"):
-				# TODO Blind implementation to be checked
-				bgr = numpy.empty((self.height,self.width,3),numpy.uint8)
-				bgr[:,:,0] = self.numpy_image[:,:,3]
-				bgr[:,:,1] = self.numpy_image[:,:,2]
-				bgr[:,:,2] = self.numpy_image[:,:,1]
-				return Image(bgr)
-			elif self.colorspace == Colorspace("XYZ"):
-				distances = numpy.linalg.norm(self.numpy_image,axis=2)
-				normalizer = distances.max()
-				if normalizer == 0.0: normalizer = 1.0
-				return Image(distances * 255.0 / normalizer)
-			elif self.colorspace == Colorspace("Infrared"):
-				return Image.__render1ChannelUint16(self)
-			elif self.colorspace == Colorspace("Distance"):
-				return Image.__render1ChannelUint16(self)
-			elif self.colorspace == Colorspace("Lab"):
-				return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_LAB2BGR))
-			elif self.colorspace == Colorspace("RawDepth"):
-				return Image.__render1ChannelUint16(self)
-			elif self.colorspace == Colorspace("Luv"):
-				return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_Luv2BGR))
-			elif self.colorspace == Colorspace("LChab"):
-				# TODO Blind implementation to be checked
-				L    = self.numpy_image[:,:,0]
-				C_ab = self.numpy_image[:,:,1]
-				h_ab = self.numpy_image[:,:,2]
-				a = numpy.multiply(C_ab, numpy.cos(h_ab))
-				b = numpy.multiply(C_ab, numpy.sin(h_ab))
-				Lab = numpy.dstack((L,a,b))
-				return Image(cv2.cvtColor(Lab, cv2.COLOR_LAB2BGR))
-			elif self.colorspace == Colorspace("LChuv"):
-				# TODO Blind implementation to be checked
-				L    = self.numpy_image[:,:,0]
-				C_uv = self.numpy_image[:,:,1]
-				h_uv = self.numpy_image[:,:,2]
-				Luv = numpy.dstack((L,u,v))
-				u = numpy.multiply(C_uv, numpy.cos(h_uv))
-				v = numpy.multiply(C_uv, numpy.sin(h_uv))
-				return Image(cv2.cvtColor(Luv, cv2.COLOR_Luv2BGR))
-			elif self.colorspace == Colorspace("Gray"):
-				return self
-			else:
-				raise RuntimeError("Can't render from colorspace {}".format(self.colorspace))
-
-		@staticmethod
-		def __render1ChannelUint16(image):
-			assert(isinstance(image,Image))
-			assert(image.depth == 1)
-			assert(image._sampleType == numpy.uint16)
-
-			normalizer = image.numpy_image.max()
+	def render(self):
+		if self.colorspace == Colorspace("BGR"):
+			return self
+		elif not _has_CV:
+			raise RuntimeError("cv2 needed to perform color conversions")
+		elif self.colorspace == Colorspace("Yuv"):
+			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
+		elif self.colorspace == Colorspace("yUv"):
+			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
+		elif self.colorspace == Colorspace("yuV"):
+			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
+		elif self.colorspace == Colorspace("Rgb"):
+			rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
+			rgb_image[:,:,2] = self.numpy_image[:,:,0]
+			return Image(rgb_image)
+		elif self.colorspace == Colorspace("rGb"):
+			rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
+			rgb_image[:,:,1] = self.numpy_image[:,:,0]
+			return Image(rgb_image)
+		elif self.colorspace == Colorspace("rgB"):
+			rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
+			rgb_image[:,:,0] = self.numpy_image[:,:,0]
+			return Image(rgb_image)
+		elif self.colorspace == Colorspace("Hsy"):
+			return self
+		elif self.colorspace == Colorspace("hSy"):
+			return self
+		elif self.colorspace == Colorspace("hsY"):
+			return self
+		elif self.colorspace == Colorspace("YUV422"):
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_YUV2BGR_YUYV))
+		elif self.colorspace == Colorspace("YUV"):
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_YCrCb2RGB))
+		elif self.colorspace == Colorspace("RGB"):
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_RGB2BGR))
+		elif self.colorspace == Colorspace("HSY"):
+			# TODO Implement but need some HSY documentation
+			raise NotImplementedError
+		elif self.colorspace == Colorspace("YYCbCr"):
+			raw = numpy.ravel(self.numpy_image)
+			yuv422 = numpy.empty(raw.shape,raw.dtype)
+			# Reorder yyuv into yuyv per 2-pixel/4-byte block
+			yuv422[0::4] = raw[0::4] # Y1 🡒 Y1
+			yuv422[1::4] = raw[2::4] # Y2 🡖 Cb
+			yuv422[2::4] = raw[1::4] # Cb 🡕 Y2
+			yuv422[3::4] = raw[3::4] # Cr 🡒 Cr
+			return Image(cv2.cvtColor(yuv422.reshape(self.numpy_image.shape), cv2.COLOR_YUV2BGR_YUYV))
+		elif self.colorspace == Colorspace("H2RGB"):
+			# TODO Implement but need some HSY documentation
+			raise NotImplementedError
+		elif self.colorspace == Colorspace("HSMixed"):
+			# TODO Implement but need some HSY documentation
+			raise NotImplementedError
+		elif self.colorspace == Colorspace("Depth"):
+			return Image.__render1ChannelUint16(self)
+		elif self.colorspace == Colorspace("ARGB"):
+			# TODO Blind implementation to be checked
+			bgr = numpy.empty((self.height,self.width,3),numpy.uint8)
+			bgr[:,:,0] = self.numpy_image[:,:,3]
+			bgr[:,:,1] = self.numpy_image[:,:,2]
+			bgr[:,:,2] = self.numpy_image[:,:,1]
+			return Image(bgr)
+		elif self.colorspace == Colorspace("XYZ"):
+			distances = numpy.linalg.norm(self.numpy_image,axis=2)
+			normalizer = distances.max()
 			if normalizer == 0.0: normalizer = 1.0
+			return Image(distances * 255.0 / normalizer)
+		elif self.colorspace == Colorspace("Infrared"):
+			return Image.__render1ChannelUint16(self)
+		elif self.colorspace == Colorspace("Distance"):
+			return Image.__render1ChannelUint16(self)
+		elif self.colorspace == Colorspace("Lab"):
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_LAB2BGR))
+		elif self.colorspace == Colorspace("RawDepth"):
+			return Image.__render1ChannelUint16(self)
+		elif self.colorspace == Colorspace("Luv"):
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_Luv2BGR))
+		elif self.colorspace == Colorspace("LChab"):
+			# TODO Blind implementation to be checked
+			L    = self.numpy_image[:,:,0]
+			C_ab = self.numpy_image[:,:,1]
+			h_ab = self.numpy_image[:,:,2]
+			a = numpy.multiply(C_ab, numpy.cos(h_ab))
+			b = numpy.multiply(C_ab, numpy.sin(h_ab))
+			Lab = numpy.dstack((L,a,b))
+			return Image(cv2.cvtColor(Lab, cv2.COLOR_LAB2BGR))
+		elif self.colorspace == Colorspace("LChuv"):
+			# TODO Blind implementation to be checked
+			L    = self.numpy_image[:,:,0]
+			C_uv = self.numpy_image[:,:,1]
+			h_uv = self.numpy_image[:,:,2]
+			Luv = numpy.dstack((L,u,v))
+			u = numpy.multiply(C_uv, numpy.cos(h_uv))
+			v = numpy.multiply(C_uv, numpy.sin(h_uv))
+			return Image(cv2.cvtColor(Luv, cv2.COLOR_Luv2BGR))
+		elif self.colorspace == Colorspace("Gray"):
+			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
+		else:
+			raise RuntimeError("Can't render from colorspace {}".format(self.colorspace))
 
-			# Float64 normalized
-			gray_float64_normalized = image.numpy_image * 255.0 / normalizer
+	@staticmethod
+	def __render1ChannelUint16(image):
+		assert(isinstance(image,Image))
+		assert(image.depth == 1)
+		assert(image._sampleType == numpy.uint16)
 
-			# Gray8 normalized
-			# gray_uint8_normalized = numpy.empty((image.height,image.width,1), numpy.uint8)
-			# gray_uint8_normalized[:] = image.numpy_image * 255.0 / normalizer
+		normalizer = image.numpy_image.max()
+		if normalizer == 0.0: normalizer = 1.0
 
-			# Gray16 un-normalized
-			# gray_uint16_unnormalized = image.numpy_image
+		# Float64 normalized
+		gray_float64_normalized = image.numpy_image * 255.0 / normalizer
 
-			# TODO Colormap
+		# Gray8 normalized
+		# gray_uint8_normalized = numpy.empty((image.height,image.width,1), numpy.uint8)
+		# gray_uint8_normalized[:] = image.numpy_image * 255.0 / normalizer
 
-			return Image(gray_float64_normalized)
+		# Gray16 un-normalized
+		# gray_uint16_unnormalized = image.numpy_image
 
-		def save(self, path):
-			if self.type ==  "CVImage":
-				cv2.imwrite(path, self.image)
-			elif self.type == "QImage":
-				self.image.save(path)
+		# TODO Colormap
+
+		return Image(numpy.dstack((gray_uint8_normalized,gray_uint8_normalized,gray_uint8_normalized)))
+
+	def save(self, path):
+		if self.type ==  "CVImage":
+			cv2.imwrite(path, self.image)
+		elif self.type == "QImage":
+			self.image.save(path)
+		else:
+			if self.colorspace == Colorspace("RGB"):
+				if _has_Qt:
+					self.qimage.save(path)
+				elif _has_CV:
+					cv2.imwrite(path, self.cv_image)
+			elif self.colorspace == Colorspace("BGR"):
+				if _has_CV:
+					cv2.imwrite(path, self.cv_image)
+				elif _has_Qt:
+					self.qimage.rgbSwapped().save(path)
 			else:
-				if self.colorspace == Colorspace("RGB"):
-					if optional.PySide:
-						self.qimage.save(path)
-					elif optional.cv2:
-						cv2.imwrite(path, self.cv_image)
-				elif self.colorspace == Colorspace("BGR"):
-					if optional.cv2:
-						cv2.imwrite(path, self.cv_image)
-					elif optional.PySide:
-						self.qimage.rgbSwapped().save(path)
-				else:
-					# Image files have no generic colorspace like ALImage, so we need to convert the
-					# image to RGB/BGR before writing it through CVImage or QImage. Additionally
-					# color conversions are only implemented by OpenCV, so we can just assume at
-					# this point cv2 is available and we'll write with its backend rather than
-					# Qt's.
+				# Image files have no generic colorspace like ALImage, so we need to convert the
+				# image to RGB/BGR before writing it through CVImage or QImage. Additionally
+				# color conversions are only implemented by OpenCV, so we can just assume at
+				# this point cv2 is available and we'll write with its backend rather than
+				# Qt's.
 
-					rendered_image = self.render()
-					cv2.imwrite(path, rendered_image.cv_image)
+				rendered_image = self.render()
+				cv2.imwrite(path, rendered_image.cv_image)
 
-		def load(self, path):
-			if optional.cv2:
-				self.image = cv2.imread(path)
-				self._type = "CVImage"
-			elif optional.PySide:
-				self.image = QImage(path).rgbSwapped()
-				self._type = "QImage"
+	def load(self, path):
+		if _has_CV:
+			self.image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+			self._type = "CVImage"
+		elif _has_Qt:
+			self.image = QImage(path).rgbSwapped()
+			self._type = "QImage"
 
-		# ──────────────
-		# Textualization
+	# ──────────────
+	# Textualization
 
-		def __str__(self):
-			colorspace_string = str(self.colorspace)
-			if self.type in ["CVImage", "QImage"]:
-				colorspace_string += " (by " + self.type + " convention)"
-			return "{}✕{}✕{} image at {} in {}".format(self.width, self.height, self.depth,
-													   hex(id(self.data)), colorspace_string)
+	def __str__(self):
+		colorspace_string = str(self.colorspace)
+		if self.type in ["CVImage", "QImage"]:
+			colorspace_string += " (by " + self.type + " convention)"
+		return "{}✕{}✕{} image at {} in {}".format(self.width, self.height, self.depth,
+												   hex(id(self.data)), colorspace_string)
 
-	def similarCVImage(cv_image):
-		return numpy.empty(cv_image.shape, cv_image.dtype)
+def similarCVImage(cv_image):
+	return numpy.empty(cv_image.shape, cv_image.dtype)
 
 #––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––#
