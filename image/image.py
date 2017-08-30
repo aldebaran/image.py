@@ -15,6 +15,7 @@ those packages are available.
 
 # Standard libraries
 import collections
+import copy
 import os
 
 # Third-party libraries
@@ -31,6 +32,10 @@ try:
 	_has_Qt = True
 except ImportError:
 	_has_Qt = False
+from xmp.xmp import XMPFile, registerNamespace
+
+CAMERA_NS=u"http://softbank-robotics.com/camera/1"
+registerNamespace(CAMERA_NS, "camera")
 
 # ──────────────────────── Embedded vision definitions ─────────────────────── #
 
@@ -461,6 +466,7 @@ class Image(object):
 			return i._loadFromQImage(
 			                         QImage(path)
 			                        )
+
 	# ───────────
 	# General API
 
@@ -591,12 +597,52 @@ class Image(object):
 		if _has_CV:
 			cv2.imwrite(path, self.cv_image)
 
+		with XMPFile(path, rw=True) as xmp_file:
+			_raw_metadata = xmp_file.metadata[CAMERA_NS]
+			_raw_metadata.camera_info.camera_matrix = self.camera_info.camera_matrix
+			_raw_metadata.camera_info.distortion_coeffs = self.camera_info.distortion_coeffs
+			_raw_metadata.camera_info.rectification_matrix = self.camera_info.rectification_matrix
+			_raw_metadata.camera_info.projection_matrix = self.camera_info.projection_matrix
 
 	def load(self, path):
 		if _has_CV:
 			self._loadFromCVImage(cv2.imread(path, cv2.IMREAD_UNCHANGED))
 		elif _has_Qt:
 			self._loadFromQImage(QImage(path))
+
+		with XMPFile(path, rw=False) as xmp_file:
+			_raw_metadata = xmp_file.metadata[CAMERA_NS]
+			if _raw_metadata.children:
+				data = _raw_metadata.value
+				cam_info = _raw_metadata.camera_info.value
+
+				if cam_info.has_key("camera:camera_matrix"):
+					cm = _raw_metadata.camera_info.camera_matrix.value
+					for i in range(len(cm)):
+						for j in range(len(cm[i])):
+							cm[i][j] = float(cm[i][j])
+					self.camera_info._camera_matrix = cm
+
+				if cam_info.has_key("camera:distortion_coeffs"):
+					cm = _raw_metadata.camera_info.distortion_coeffs
+					for i in range(len(cm)):
+						for j in range(len(cm[i])):
+							cm[i][j] = float(cm[i][j])
+					self.camera_info._distortion_coeffs = cm
+
+				if cam_info.has_key("camera:rectification_matrix"):
+					cm = _raw_metadata.camera_info.rectification_matrix.value
+					for i in range(len(cm)):
+						for j in range(len(cm[i])):
+							cm[i][j] = float(cm[i][j])
+					self.camera_info._rectification_matrix = cm
+
+				if cam_info.has_key("camera:projection_matrix"):
+					cm = _raw_metadata.camera_info.projection_matrix.value
+					for i in range(len(cm)):
+						for j in range(len(cm[i])):
+							cm[i][j] = float(cm[i][j])
+					self.camera_info._projection_matrix = cm
 
 	# ──────────────
 	# Textualization
@@ -611,6 +657,45 @@ class CameraInfo(object):
 	@property
 	def height(self):
 		return getattr(self,"_height",None)
+
+	@property
+	def camera_matrix(self):
+		if not hasattr(self, "_camera_matrix"):
+			cm = [
+			  [1.0,    0.0,  float(self.width)/2],
+			  [0.0,    1.0, float(self.height)/2],
+			  [0.0,    1.0,         1.0         ],
+			]
+			self._camera_matrix = cm
+		return copy.deepcopy(self._camera_matrix)
+
+	@property
+	def distortion_coeffs(self):
+		if not hasattr(self, "_distortion_coeffs"):
+			self._distortion_coeffs = []
+		return copy.deepcopy(self._distortion_coeffs)
+
+	@property
+	def rectification_matrix(self):
+		if not hasattr(self, "_rectification_matrix"):
+			self._rectification_matrix = [
+			    [1.0, 0.0, 0.0],
+			    [0.0, 1.0, 0.0],
+			    [0.0, 0.0, 1.0],
+			]
+		return copy.deepcopy(self._rectification_matrix)
+
+	@property
+	def projection_matrix(self):
+		if not hasattr(self, "_projection_matrix"):
+			self._projection_matrix = [
+			    [0.0, 0.0, 0.0, 0.0],
+			    [0.0, 0.0, 0.0, 0.0],
+			    [0.0, 0.0, 0.0, 0.0],
+			]
+			self._projection_matrix[0:3][0:3] = copy.deepcopy(self.camera_matrix)
+		return copy.deepcopy(self._projection_matrix)
+
 def similarCVImage(cv_image):
 	return numpy.empty(cv_image.shape, cv_image.dtype)
 

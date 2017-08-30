@@ -36,6 +36,7 @@ setup(
         "enum34 >= 1.0.0",
         "numpy >= 1.8.0",
         "Qt.py >= 1.0.0",
+        "xmp >= 0.3",
     ],
     package_data={"image":["VERSION"]},
 )

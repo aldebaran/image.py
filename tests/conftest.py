@@ -30,6 +30,7 @@ SANDBOX_FOLDER = "/tmp/image_wrapper/"
 
 GRAY_PHOTO = "top.png"
 COLOR_PHOTO = "SpringNebula.jpg"
+LEFT_PHOTO = "left.png"
 
 #[MODULE CONTENT]--------------------------------------------------------------
 
@@ -74,3 +75,6 @@ def color_file_path():
 def gray_file_path():
 	return sandboxed(GRAY_PHOTO)
 
+@pytest.fixture(scope="function")
+def left_file_path():
+	return sandboxed(LEFT_PHOTO)

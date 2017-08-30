@@ -46,3 +46,13 @@ def test_image_open_from_file(gray_file_path, color_file_path):
 		assert(isinstance(i_color.qimage, QImage))
 		assert(isinstance(i_color.cv_image, numpy.ndarray))
 
+def test_image_camera_matrix_set(left_file_path):
+	i_left = Image(left_file_path)
+	assert(1.0 == i_left.camera_info.camera_matrix[0][0])
+
+	i_left.camera_info._camera_matrix[0][0] = 10.0
+	assert(10.0 == i_left.camera_info.camera_matrix[0][0])
+	i_left.save(left_file_path)
+
+	i_left2 = Image(left_file_path)
+	assert(10.0 == i_left2.camera_info.camera_matrix[0][0])
