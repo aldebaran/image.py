@@ -224,10 +224,10 @@ class Image(object):
 	"""
 
 	def __init__(self, image = None, colorspace = None):
+		self._camera_info = CameraInfo()
+
 		if image is None:
 			return
-
-		self._camera_info = CameraInfo()
 
 		# The type was unspecified and we have an image object; determine what kind of
 		# object and what to do with it
@@ -238,7 +238,7 @@ class Image(object):
 			self._loadFromCVImage(image, colorspace)
 		elif Image.isQImage(image):
 			# We assume the image is RGB as per Qt assumptions
-			self._loadFromQImage(image, colorspace)
+			self._loadFromQImage(image)
 		elif Image.isImagePath(image):
 			self.load(image)
 		else:
@@ -366,15 +366,13 @@ class Image(object):
 				bgr_image = self.render()
 				if not _has_CV:
 					raise RuntimeError("cv2 needed to perform color conversions")
-				img = Image(cv2.cvtColor(bgr_image.cv_image, cv2.COLOR_RGB2BGR))
-				colorspace = Colorspace("RGB")
+				img = Image(cv2.cvtColor(bgr_image.cv_image, cv2.COLOR_RGB2BGR),"RGB")
 			else:
 				img = self
-				colorspace = self.colorspace
 
 			q_im = QImage(img.data,
 						  img.width, img.height, img.depth*img.width,
-						  QImage.Format(colorspace.qt_code))
+						  QImage.Format(img.colorspace.qt_code))
 			return q_im
 
 	# ────────────────────────
@@ -431,9 +429,9 @@ class Image(object):
 			self.colorspace = colorspace
 
 	@staticmethod
-	def fromQImage(q_image, colorspace=None):
+	def fromQImage(q_image):
 		i = Image()
-		i._loadFromQImage(cv_image, colorspace)
+		i._loadFromQImage(q_image)
 		return i
 
 	def _loadFromQImage(self, q_image):
@@ -592,16 +590,23 @@ class Image(object):
 		return Image(numpy.dstack((gray_uint8_normalized,gray_uint8_normalized,gray_uint8_normalized)),"BGR")
 
 	def save(self, path):
+		colorspace = self.colorspace
 		if _has_CV:
 			if self.depth in [1,3]\
 			   and self._sampleType in [numpy.uint8, numpy.uint16]:
 				cv2.imwrite(path, self.cv_image)
-				saved_image = self
 			else:
 				saved_image = self.render()
+				colorspace = saved_image.colorspace
 				cv2.imwrite(path, saved_image.cv_image)
+		elif _has_Qt:
+			# If Qt is there and not OpenCV, the image type should already be
+			# a Qt type, so no conversion will be needed
+			o = self.qimage
+			colorspace = Colorspace(qt_code=o.format())
+			o.save(path)
 		else:
-			raise RuntimeError("cv2 needed to save an image")
+			raise RuntimeError("cv2 or qt are needed to save an image")
 
 		with XMPFile(path, rw=True) as xmp_file:
 			_raw_metadata = xmp_file.metadata[CAMERA_NS]
@@ -609,13 +614,15 @@ class Image(object):
 			_raw_metadata.camera_info.distortion_coeffs = self.camera_info.distortion_coeffs
 			_raw_metadata.camera_info.rectification_matrix = self.camera_info.rectification_matrix
 			_raw_metadata.camera_info.projection_matrix = self.camera_info.projection_matrix
-			_raw_metadata.colorspace = str(saved_image.colorspace)
+			_raw_metadata.colorspace = str(colorspace)
 
 	def load(self, path):
 		if _has_CV:
 			self._loadFromCVImage(cv2.imread(path, cv2.IMREAD_UNCHANGED))
 		elif _has_Qt:
 			self._loadFromQImage(QImage(path))
+		else:
+			raise RuntimeError("Qt or cv2 are necessary to open a image file")
 
 		with XMPFile(path, rw=False) as xmp_file:
 			_raw_metadata = xmp_file.metadata[CAMERA_NS]
@@ -652,6 +659,7 @@ class Image(object):
 					self.camera_info._projection_matrix = cm
 
 				self.colorspace = Colorspace(_raw_metadata.colorspace.value)
+
 	# ──────────────
 	# Textualization
 
@@ -660,19 +668,19 @@ class CameraInfo(object):
 
 	@property
 	def width(self):
-		return getattr(self,"_width",None)
+		return getattr(self,"_width",0)
 
 	@property
 	def height(self):
-		return getattr(self,"_height",None)
+		return getattr(self,"_height",0)
 
 	@property
 	def camera_matrix(self):
 		if not hasattr(self, "_camera_matrix"):
 			cm = [
-			  [1.0,    0.0,  float(self.width)/2],
-			  [0.0,    1.0, float(self.height)/2],
-			  [0.0,    1.0,         1.0         ],
+			  [1.0,    0.0,  float(self.width-1)/2.0],
+			  [0.0,    1.0, float(self.height-1)/2.0],
+			  [0.0,    1.0,           1.0           ],
 			]
 			self._camera_matrix = cm
 		return copy.deepcopy(self._camera_matrix)
