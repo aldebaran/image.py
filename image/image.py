@@ -476,23 +476,23 @@ class Image(object):
 		elif not _has_CV:
 			raise RuntimeError("cv2 needed to perform color conversions")
 		elif self.colorspace == Colorspace("Yuv"):
-			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
+			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)),"BGR")
 		elif self.colorspace == Colorspace("yUv"):
-			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
+			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)),"BGR")
 		elif self.colorspace == Colorspace("yuV"):
-			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
+			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)),"BGR")
 		elif self.colorspace == Colorspace("Rgb"):
-			rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
-			rgb_image[:,:,2] = self.numpy_image[:,:,0]
-			return Image(rgb_image)
+			bgr_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
+			bgr_image[:,:,2] = self.numpy_image[:,:,0]
+			return Image(bgr_image,"BGR")
 		elif self.colorspace == Colorspace("rGb"):
-			rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
-			rgb_image[:,:,1] = self.numpy_image[:,:,0]
-			return Image(rgb_image)
+			bgr_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
+			bgr_image[:,:,1] = self.numpy_image[:,:,0]
+			return Image(bgr_image,"BGR")
 		elif self.colorspace == Colorspace("rgB"):
-			rgb_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
-			rgb_image[:,:,0] = self.numpy_image[:,:,0]
-			return Image(rgb_image)
+			bgr_image = numpy.zeros((self.height,self.width,3), numpy.uint8)
+			bgr_image[:,:,0] = self.numpy_image[:,:,0]
+			return Image(bgr_image,"BGR")
 		elif self.colorspace == Colorspace("Hsy"):
 			return self
 		elif self.colorspace == Colorspace("hSy"):
@@ -500,11 +500,11 @@ class Image(object):
 		elif self.colorspace == Colorspace("hsY"):
 			return self
 		elif self.colorspace == Colorspace("YUV422"):
-			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_YUV2BGR_YUYV))
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_YUV2BGR_YUYV),"BGR")
 		elif self.colorspace == Colorspace("YUV"):
-			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_YCrCb2RGB))
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_YCrCb2BGR),"BGR")
 		elif self.colorspace == Colorspace("RGB"):
-			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_RGB2BGR))
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_RGB2BGR),"BGR")
 		elif self.colorspace == Colorspace("HSY"):
 			# TODO Implement but need some HSY documentation
 			raise NotImplementedError
@@ -516,7 +516,7 @@ class Image(object):
 			yuv422[1::4] = raw[2::4] # Y2 🡖 Cb
 			yuv422[2::4] = raw[1::4] # Cb 🡕 Y2
 			yuv422[3::4] = raw[3::4] # Cr 🡒 Cr
-			return Image(cv2.cvtColor(yuv422.reshape(self.numpy_image.shape), cv2.COLOR_YUV2BGR_YUYV))
+			return Image(cv2.cvtColor(yuv422.reshape(self.numpy_image.shape), cv2.COLOR_YUV2BGR_YUYV),"BGR")
 		elif self.colorspace == Colorspace("H2RGB"):
 			# TODO Implement but need some HSY documentation
 			raise NotImplementedError
@@ -525,13 +525,13 @@ class Image(object):
 			raise NotImplementedError
 		elif self.colorspace == Colorspace("Depth"):
 			return Image.__render1ChannelUint16(self)
-		elif self.colorspace == Colorspace("ARGB"):
+		elif self.colorspace in [Colorspace("ARGB"), Colorspace("RGB32")]:
 			# TODO Blind implementation to be checked
 			bgr = numpy.empty((self.height,self.width,3),numpy.uint8)
 			bgr[:,:,0] = self.numpy_image[:,:,3]
 			bgr[:,:,1] = self.numpy_image[:,:,2]
 			bgr[:,:,2] = self.numpy_image[:,:,1]
-			return Image(bgr)
+			return Image(bgr,"BGR")
 		elif self.colorspace == Colorspace("XYZ"):
 			distances = numpy.linalg.norm(self.numpy_image,axis=2)
 			normalizer = distances.max()
@@ -542,11 +542,11 @@ class Image(object):
 		elif self.colorspace == Colorspace("Distance"):
 			return Image.__render1ChannelUint16(self)
 		elif self.colorspace == Colorspace("Lab"):
-			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_LAB2BGR))
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_LAB2BGR),"BGR")
 		elif self.colorspace == Colorspace("RawDepth"):
 			return Image.__render1ChannelUint16(self)
 		elif self.colorspace == Colorspace("Luv"):
-			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_Luv2BGR))
+			return Image(cv2.cvtColor(self.numpy_image, cv2.COLOR_Luv2BGR),"BGR")
 		elif self.colorspace == Colorspace("LChab"):
 			# TODO Blind implementation to be checked
 			L    = self.numpy_image[:,:,0]
@@ -555,7 +555,7 @@ class Image(object):
 			a = numpy.multiply(C_ab, numpy.cos(h_ab))
 			b = numpy.multiply(C_ab, numpy.sin(h_ab))
 			Lab = numpy.dstack((L,a,b))
-			return Image(cv2.cvtColor(Lab, cv2.COLOR_LAB2BGR))
+			return Image(cv2.cvtColor(Lab, cv2.COLOR_LAB2BGR),"BGR")
 		elif self.colorspace == Colorspace("LChuv"):
 			# TODO Blind implementation to be checked
 			L    = self.numpy_image[:,:,0]
@@ -564,9 +564,7 @@ class Image(object):
 			Luv = numpy.dstack((L,u,v))
 			u = numpy.multiply(C_uv, numpy.cos(h_uv))
 			v = numpy.multiply(C_uv, numpy.sin(h_uv))
-			return Image(cv2.cvtColor(Luv, cv2.COLOR_Luv2BGR))
-		elif self.colorspace == Colorspace("Gray"):
-			return Image(numpy.dstack((self.numpy_image,self.numpy_image,self.numpy_image)))
+			return Image(cv2.cvtColor(Luv, cv2.COLOR_Luv2BGR),"BGR")
 		else:
 			raise RuntimeError("Can't render from colorspace {}".format(self.colorspace))
 
@@ -580,22 +578,30 @@ class Image(object):
 		if normalizer == 0.0: normalizer = 1.0
 
 		# Float64 normalized
-		gray_float64_normalized = image.numpy_image * 255.0 / normalizer
+		# gray_float64_normalized = image.numpy_image * 255.0 / normalizer
 
 		# Gray8 normalized
-		# gray_uint8_normalized = numpy.empty((image.height,image.width,1), numpy.uint8)
-		# gray_uint8_normalized[:] = image.numpy_image * 255.0 / normalizer
+		gray_uint8_normalized = numpy.empty((image.height,image.width,1), numpy.uint8)
+		gray_uint8_normalized[:] = image.numpy_image * 255.0 / normalizer
 
 		# Gray16 un-normalized
 		# gray_uint16_unnormalized = image.numpy_image
 
 		# TODO Colormap
 
-		return Image(numpy.dstack((gray_uint8_normalized,gray_uint8_normalized,gray_uint8_normalized)))
+		return Image(numpy.dstack((gray_uint8_normalized,gray_uint8_normalized,gray_uint8_normalized)),"BGR")
 
 	def save(self, path):
 		if _has_CV:
-			cv2.imwrite(path, self.cv_image)
+			if self.depth in [1,3]\
+			   and self._sampleType in [numpy.uint8, numpy.uint16]:
+				cv2.imwrite(path, self.cv_image)
+				saved_image = self
+			else:
+				saved_image = self.render()
+				cv2.imwrite(path, saved_image.cv_image)
+		else:
+			raise RuntimeError("cv2 needed to save an image")
 
 		with XMPFile(path, rw=True) as xmp_file:
 			_raw_metadata = xmp_file.metadata[CAMERA_NS]
@@ -603,6 +609,7 @@ class Image(object):
 			_raw_metadata.camera_info.distortion_coeffs = self.camera_info.distortion_coeffs
 			_raw_metadata.camera_info.rectification_matrix = self.camera_info.rectification_matrix
 			_raw_metadata.camera_info.projection_matrix = self.camera_info.projection_matrix
+			_raw_metadata.colorspace = str(saved_image.colorspace)
 
 	def load(self, path):
 		if _has_CV:
@@ -644,6 +651,7 @@ class Image(object):
 							cm[i][j] = float(cm[i][j])
 					self.camera_info._projection_matrix = cm
 
+				self.colorspace = Colorspace(_raw_metadata.colorspace.value)
 	# ──────────────
 	# Textualization
 

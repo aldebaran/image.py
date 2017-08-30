@@ -28,6 +28,7 @@ __email__ = "sambrose@softbankrobotics.com"
 DATA_FOLDER = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data/")
 SANDBOX_FOLDER = "/tmp/image_wrapper/"
 
+DEPTH_PHOTO = "depth.png"
 GRAY_PHOTO = "top.png"
 COLOR_PHOTO = "SpringNebula.jpg"
 LEFT_PHOTO = "left.png"
@@ -78,3 +79,7 @@ def gray_file_path():
 @pytest.fixture(scope="function")
 def left_file_path():
 	return sandboxed(LEFT_PHOTO)
+
+@pytest.fixture(scope="function")
+def depth_file_path():
+	return sandboxed(DEPTH_PHOTO)
