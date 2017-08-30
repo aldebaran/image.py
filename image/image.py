@@ -58,8 +58,8 @@ class Colorspace(Enum):
 
 	# Name | AL Code | Qt code | # of channels | Inner type
 
-	Yuv      = (   0,   24, 1, numpy.uint8)
-	Gray     = (   0,   24, 1, numpy.uint8) # alias for Yuv
+	Yuv      = (   0,    3, 1, numpy.uint8)
+	Gray     = (   0,    3, 1, numpy.uint8) # alias for Yuv
 	yUv      = (   1, None, 1, numpy.uint8)
 	yuV      = (   2, None, 1, numpy.uint8)
 	Rgb      = (   3, None, 1, numpy.uint8)
@@ -107,6 +107,10 @@ class Colorspace(Enum):
 	# Format_RGB444	                14
 	# Format_ARGB4444_Premultiplied	15
 
+	## The following values were introduced in Qt5 and later. Supporting them
+	## might lead to an impossibility to use Qt4 anymore, so for now we don't
+	## use them
+
 	## From Qt 5.2
 
 	# Format_RGBX8888               16
@@ -123,11 +127,7 @@ class Colorspace(Enum):
 	## From Qt 5.5
 
 	# Format_Alpha8                 23
-
-
-	# COLOR    = set(range(17)+[18,22,24,25,26])
-	# DEPTH    = set([17,19,21,23])
-	# INFRARED = set([20])
+	# Format_Gray8                  24
 
 	# ––––––––––––––
 	# Static Helpers
