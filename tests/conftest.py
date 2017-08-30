@@ -28,7 +28,8 @@ __email__ = "sambrose@softbankrobotics.com"
 DATA_FOLDER = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data/")
 SANDBOX_FOLDER = "/tmp/image_wrapper/"
 
-JPG_PHOTO = "top.png"
+GRAY_PHOTO = "top.png"
+COLOR_PHOTO = "SpringNebula.jpg"
 
 #[MODULE CONTENT]--------------------------------------------------------------
 
@@ -66,5 +67,10 @@ def begin(request):
 	request.addfinalizer(fin)
 
 @pytest.fixture(scope="function")
-def jpg_file_path():
-	return sandboxed(JPG_PHOTO)
+def color_file_path():
+	return sandboxed(COLOR_PHOTO)
+
+@pytest.fixture(scope="function")
+def gray_file_path():
+	return sandboxed(GRAY_PHOTO)
+
