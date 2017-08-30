@@ -218,23 +218,22 @@ class Image(object):
 	writing or color conversion would be impossible.
 	"""
 
-	def __init__(self, image = None, image_type = None):
-		self.image  = image # Keep a pointer on the object to keep it alive
-
-		if image is None or image_type is not None:
+	def __init__(self, image = None, colorspace = None):
+		if image is None:
 			return
+
+		self._camera_info = CameraInfo()
 
 		# The type was unspecified and we have an image object; determine what kind of
 		# object and what to do with it
 		if Image.isALImage(image):
-			self._type = "ALImage"
+			self._loadFromALImage(image)
 		elif Image.isCVImage(image):
 			# We assume the image is BGR as per OpenCV assumptions
-			self._type = "CVImage"
+			self._loadFromCVImage(image, colorspace)
 		elif Image.isQImage(image):
 			# We assume the image is RGB as per Qt assumptions
-			self.image = image.rgbSwapped()
-			self._type = "QImage"
+			self._loadFromQImage(image, colorspace)
 		elif Image.isImagePath(image):
 			self.load(image)
 		else:
@@ -245,83 +244,29 @@ class Image(object):
 
 	@property
 	def data(self):
-		if self.type == "ALImage":
-			return self.image[6]
-		elif self.type == "QImage":
-			return self.image.bits()
-		elif self.type == "CVImage":
-			return self.image.data
-		else:
-			return None
+		return getattr(self,"_data",None)
 
 	@property
 	def width(self):
-		if self.type == "ALImage":
-			return self.image[0]
-		elif self.type == "QImage":
-			return self.image.width()
-		elif self.type == "CVImage":
-			return self.image.shape[1]
-		else:
-			return None
+		return self.camera_info.width
 
 	@property
 	def height(self):
-		if self.type == "ALImage":
-			return self.image[1]
-		elif self.type == "QImage":
-			return self.image.height()
-		elif self.type == "CVImage":
-			return self.image.shape[0]
-		else:
-			return None
+		return self.camera_info.height
 
 	@property
 	def depth(self):
 		"""
 		Number of channels.
 		"""
-		if self.type == "ALImage":
-			return self.colorspace.depth
-		elif self.type == "QImage":
-			# QImages can only contain integers
-			return self.image.depth() / 8
-		elif self.type == "CVImage":
-			if len(self.image.shape) == 3:
-				return self.image.shape[2]
-			else:
-				return 1
-		else:
-			return None
-
-	@property
-	def sampleDepth(self):
-		if self.type == "ALImage":
-			return self.image[2]
-		elif self.type == "QImage":
-			return self.image.depth() / 8
-		elif self.type == "CVImage":
-			if len(self.image.shape) == 3:
-				return self.image.shape[2]
-			else:
-				return 1
-		else:
-			return None
+		return getattr(self,"_depth",None)
 
 	@property
 	def _sampleType(self):
 		"""
 		Numpy sample type.
 		"""
-		if self.type == "ALImage":
-			return self.colorspace._type
-		elif self.type == "QImage":
-			return self.colorspace._type
-		elif self.type == "CVImage":
-			return self.image.dtype
-		else:
-			return None
-		return self.colorspace._type
+		return self._dtype
 
 	@property
 	def resolution(self):
@@ -388,9 +333,8 @@ class Image(object):
 		self._colorspace = Colorspace(colorspace)
 
 	@property
-	def type(self):
-		assert(any([self._type == t for t in ["ALImage", "QImage", "CVImage"]]))
-		return self._type
+	def camera_info(self):
+		return self._camera_info
 
 	# ─────────────────────
 	# Conversion Properties
@@ -412,23 +356,21 @@ class Image(object):
 	if _has_Qt:
 		@property
 		def qimage(self):
-			if self.type == "QImage":
-				return self
-
 			# Note: QImages can only contain integer images; render them if not integer
-			if (self.colorspace not in [Colorspace("BGR"), Colorspace("RGB")]
-			 or self._sampleType != numpy.uint8
-			 or self.sampleDepth != 3
-			 or       self.depth != 3):
-				return self.render().qimage
+			if self.colorspace.qt_code is None:
+				bgr_image = self.render()
+				if not _has_CV:
+					raise RuntimeError("cv2 needed to perform color conversions")
+				img = Image(cv2.cvtColor(bgr_image.cv_image, cv2.COLOR_RGB2BGR))
+				colorspace = Colorspace("RGB")
+			else:
+				img = self
+				colorspace = self.colorspace
 
-			rgb_image =  QImage(self.data,
-						        self.width, self.height, self.depth*self.width,
-						        QImage.Format_RGB888)
-			if self.colorspace == Colorspace("RGB"):
-				return rgb_image
-			elif self.colorspace == Colorspace("BGR"):
-				return rgb_image.rgbSwapped()
+			q_im = QImage(img.data,
+						  img.width, img.height, img.depth*img.width,
+						  QImage.Format(colorspace.qt_code))
+			return q_im
 
 	# ────────────────────────
 	# Image-type determination
@@ -452,6 +394,73 @@ class Image(object):
 	def isImagePath(o):
 		return isinstance(o, basestring) and os.path.isfile(o)
 
+	# ─────────────
+	# Image loaders
+
+	@staticmethod
+	def fromALImage(al_image):
+		i = Image()
+		i._loadFromALImage(al_image)
+		return i
+
+	def _loadFromALImage(self, al_image):
+		self._data = al_image[6]
+		self._camera_info._width = al_image[0]
+		self._camera_info._height = al_image[1]
+		self._depth = al_image[2]
+		self.colorspace = al_image[3]
+
+	@staticmethod
+	def fromCVImage(cv_image, colorspace=None):
+		i = Image()
+		i._loadFromCVImage(cv_image, colorspace)
+		return i
+
+	def _loadFromCVImage(self, cv_image, colorspace=None):
+		self._data = cv_image.data
+		self._dtype = cv_image.dtype
+		self._camera_info._width = cv_image.shape[1]
+		self._camera_info._height = cv_image.shape[0]
+		self._depth = 1 if len(cv_image.shape) < 3 else cv_image.shape[2]
+		if colorspace is not None:
+			self.colorspace = colorspace
+
+	@staticmethod
+	def fromQImage(q_image, colorspace=None):
+		i = Image()
+		i._loadFromQImage(cv_image, colorspace)
+		return i
+
+	def _loadFromQImage(self, q_image):
+		if q_image.format() in range(0,3):# Image we cannot handle
+			raise Exception("QImage format %s is not handled by image"%q_image.format())
+		elif q_image.format() in range(4,23):# Color images
+			q_image = q_image.convertToFormat(QImage.Format_RGB888)
+			self.colorspace = Colorspace("RGB")
+		elif q_image.format() in [3, 23, 24]: # Indexed8, Alpha8, Grayscale8
+			self.colorspace = Colorspace("Yuv")
+
+		# This might not work for all Qt bindings
+		# PySide seems ok
+		# But PyQt5 prefers to have q_image.bits().asarray(width*height) or similar..
+		self._data = q_image.bits()
+		self._camera_info._width = q_image.width()
+		self._camera_info._height = q_image.height()
+		self._depth = q_image.depth() / 8
+		self._dtype = numpy.uint8
+
+	@staticmethod
+	def fromFilePath(path, colorspace = None):
+		i = Image()
+		if _has_CV:
+			return i._loadFromCVImage(
+			                          cv2.imread(path, cv2.IMREAD_UNCHANGED),
+			                          colorspace
+			                         )
+		elif _has_Qt:
+			return i._loadFromQImage(
+			                         QImage(path)
+			                        )
 	# ───────────
 	# General API
 
@@ -579,49 +588,29 @@ class Image(object):
 		return Image(numpy.dstack((gray_uint8_normalized,gray_uint8_normalized,gray_uint8_normalized)))
 
 	def save(self, path):
-		if self.type ==  "CVImage":
-			cv2.imwrite(path, self.image)
-		elif self.type == "QImage":
-			self.image.save(path)
-		else:
-			if self.colorspace == Colorspace("RGB"):
-				if _has_Qt:
-					self.qimage.save(path)
-				elif _has_CV:
-					cv2.imwrite(path, self.cv_image)
-			elif self.colorspace == Colorspace("BGR"):
-				if _has_CV:
-					cv2.imwrite(path, self.cv_image)
-				elif _has_Qt:
-					self.qimage.rgbSwapped().save(path)
-			else:
-				# Image files have no generic colorspace like ALImage, so we need to convert the
-				# image to RGB/BGR before writing it through CVImage or QImage. Additionally
-				# color conversions are only implemented by OpenCV, so we can just assume at
-				# this point cv2 is available and we'll write with its backend rather than
-				# Qt's.
+		if _has_CV:
+			cv2.imwrite(path, self.cv_image)
 
-				rendered_image = self.render()
-				cv2.imwrite(path, rendered_image.cv_image)
 
 	def load(self, path):
 		if _has_CV:
-			self.image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-			self._type = "CVImage"
+			self._loadFromCVImage(cv2.imread(path, cv2.IMREAD_UNCHANGED))
 		elif _has_Qt:
-			self.image = QImage(path).rgbSwapped()
-			self._type = "QImage"
+			self._loadFromQImage(QImage(path))
 
 	# ──────────────
 	# Textualization
 
-	def __str__(self):
-		colorspace_string = str(self.colorspace)
-		if self.type in ["CVImage", "QImage"]:
-			colorspace_string += " (by " + self.type + " convention)"
-		return "{}✕{}✕{} image at {} in {}".format(self.width, self.height, self.depth,
-												   hex(id(self.data)), colorspace_string)
 
+class CameraInfo(object):
+
+	@property
+	def width(self):
+		return getattr(self,"_width",None)
+
+	@property
+	def height(self):
+		return getattr(self,"_height",None)
 def similarCVImage(cv_image):
 	return numpy.empty(cv_image.shape, cv_image.dtype)
 

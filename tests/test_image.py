@@ -1,5 +1,6 @@
 
 # Third-party libraries
+import numpy
 import pytest
 try:
 	import cv2
@@ -30,3 +31,18 @@ def test_colorspace():
 def test_image_open_from_file(gray_file_path, color_file_path):
 	i_color = Image(color_file_path)
 	i_gray = Image(gray_file_path)
+
+	if _has_CV:
+		assert(Colorspace("BGR") == i_color.colorspace)
+		assert(Colorspace("Gray") == i_gray.colorspace)
+		if not _has_Qt:
+			assert(not hasattr(i_color, "qimage"))
+	elif _has_Qt:
+		assert(not hasattr(i_color, "cv_image"))
+		assert(Colorspace("RGB") == i_color.colorspace)
+		assert(Colorspace("Gray") == i_gray.colorspace)
+
+	if _has_CV and _has_Qt:
+		assert(isinstance(i_color.qimage, QImage))
+		assert(isinstance(i_color.cv_image, numpy.ndarray))
+
