@@ -40,6 +40,7 @@ def test_image_open_from_file(gray_file_path, color_file_path, depth_file_path):
 		assert(Colorspace("BGR") == i_color.colorspace)
 		# i_depth is Depth if opened with OpenCV
 		assert(Colorspace("Depth") == i_depth.colorspace)
+		assert((640,480) == i_gray.resolution)
 
 		# Test depth rendering
 		i_depth_rendered = i_depth.render()

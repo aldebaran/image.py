@@ -275,7 +275,7 @@ class Image(object):
 
 	@property
 	def resolution(self):
-		return Resolution((self.width, self.height))
+		return (self.width, self.height)
 
 	@property
 	def colorspace(self):
