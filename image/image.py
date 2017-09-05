@@ -680,7 +680,7 @@ class CameraInfo(object):
 			cm = [
 			  [1.0,    0.0,  float(self.width-1)/2.0],
 			  [0.0,    1.0, float(self.height-1)/2.0],
-			  [0.0,    1.0,           1.0           ],
+			  [0.0,    0.0,           1.0           ],
 			]
 			self._camera_matrix = cm
 		return copy.deepcopy(self._camera_matrix)
@@ -709,7 +709,9 @@ class CameraInfo(object):
 			    [0.0, 0.0, 0.0, 0.0],
 			    [0.0, 0.0, 0.0, 0.0],
 			]
-			self._projection_matrix[0:3][0:3] = copy.deepcopy(self.camera_matrix)
+			self._projection_matrix[0][0:3] = self.camera_matrix[0]
+			self._projection_matrix[1][0:3] = self.camera_matrix[1]
+			self._projection_matrix[2][0:3] = self.camera_matrix[2]
 		return copy.deepcopy(self._projection_matrix)
 
 def similarCVImage(cv_image):
