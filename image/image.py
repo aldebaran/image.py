@@ -638,10 +638,9 @@ class Image(object):
 					self.camera_info._camera_matrix = cm
 
 				if cam_info.has_key("camera:distortion_coeffs"):
-					cm = _raw_metadata.camera_info.distortion_coeffs
+					cm = _raw_metadata.camera_info.distortion_coeffs.value
 					for i in range(len(cm)):
-						for j in range(len(cm[i])):
-							cm[i][j] = float(cm[i][j])
+						cm[i] = float(cm[i])
 					self.camera_info._distortion_coeffs = cm
 
 				if cam_info.has_key("camera:rectification_matrix"):
