@@ -1,5 +1,5 @@
 # Import main class
-from .image import Image, Colorspace
+from .image import Image, Colorspace, CameraInfo
 
 # Define package version
 import os as _os

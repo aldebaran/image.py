@@ -15,7 +15,7 @@ except ImportError:
 	_has_Qt = False
 
 # Local modules
-from image import Image, Colorspace
+from image import Image, Colorspace, CameraInfo
 
 def test_colorspace():
 	rgb = Colorspace("RGB")
@@ -104,3 +104,73 @@ def test_image_camera_matrix_set(left_file_path):
 	i_left2 = Image(left_file_path)
 	assert(10.0 == i_left2.camera_info.camera_matrix[0][0])
 	assert(-0.1 == i_left.camera_info.distortion_coeffs[0])
+
+@pytest.mark.skipif(not _has_CV and not _has_Qt,
+                    reason="Image cannot be opened without Qt nor cv2")
+def test_image_stereo(stereo_file_path):
+	# Open image
+	i_stereo = Image(stereo_file_path)
+	assert(not hasattr(i_stereo, "left_image"))
+	assert(not hasattr(i_stereo, "right_image"))
+	assert(not hasattr(i_stereo, "top_image"))
+	assert(not hasattr(i_stereo, "bottom_image"))
+	assert(i_stereo.is_mono)
+
+	# Create left and right camera info
+	mono_cam_info = CameraInfo()
+	mono_cam_info.setWidth(2560)
+	mono_cam_info.setHeight(720)
+	left_cam_info = CameraInfo()
+	left_cam_info.setWidth(1280)
+	left_cam_info.setHeight(720)
+	right_cam_info = CameraInfo()
+	right_cam_info.setWidth(1280)
+	right_cam_info.setHeight(720)
+	top_cam_info = CameraInfo()
+	top_cam_info.setWidth(2560)
+	top_cam_info.setHeight(360)
+	bottom_cam_info = CameraInfo()
+	bottom_cam_info.setWidth(2560)
+	bottom_cam_info.setHeight(360)
+
+	# Set image as vertical stereo
+	i_stereo.setIsStereo(top_cam_info, bottom_cam_info)
+	assert(hasattr(i_stereo, "top_image"))
+	assert(hasattr(i_stereo, "bottom_image"))
+	assert((2560,360) == i_stereo.top_image.resolution)
+	assert((2560,360) == i_stereo.bottom_image.resolution)
+	assert(not hasattr(i_stereo, "left_image"))
+	assert(not hasattr(i_stereo, "right_image"))
+
+	# Change to horizontal stereo
+	i_stereo.setIsStereo(left_cam_info, right_cam_info)
+	assert(hasattr(i_stereo, "left_image"))
+	assert(hasattr(i_stereo, "right_image"))
+	assert((1280,720) == i_stereo.left_image.resolution)
+	assert((1280,720) == i_stereo.right_image.resolution)
+	assert(not hasattr(i_stereo, "top_image"))
+	assert(not hasattr(i_stereo, "bottom_image"))
+
+	# Save and check if changes were saved
+	i_stereo.save(stereo_file_path)
+
+	i_stereo = Image(stereo_file_path)
+	assert(1280 == i_stereo.camera_info[0].width)
+	assert(720 == i_stereo.camera_info[0].height)
+	assert(1280 == i_stereo.camera_info[1].width)
+	assert(720 == i_stereo.camera_info[1].height)
+	assert(2560 == i_stereo.width)
+	assert(720 == i_stereo.height)
+	assert(hasattr(i_stereo, "left_image"))
+	assert(hasattr(i_stereo, "right_image"))
+	assert(i_stereo.is_stereo)
+
+	# Go back to mono image
+	i_stereo.setIsMono(mono_cam_info)
+	assert(not hasattr(i_stereo, "left_image"))
+	assert(not hasattr(i_stereo, "right_image"))
+	assert(not hasattr(i_stereo, "top_image"))
+	assert(not hasattr(i_stereo, "bottom_image"))
+
+	# assert(hasaatr(i_stereo, "left_image"))
+	# i_stereo.camera_info

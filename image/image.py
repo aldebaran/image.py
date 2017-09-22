@@ -223,7 +223,7 @@ class Image(object):
 	writing or color conversion would be impossible.
 	"""
 
-	def __init__(self, image = None, colorspace = None):
+	def __init__(self, image = None, colorspace = None, camera_info = None):
 		self._camera_info = CameraInfo()
 
 		if image is None:
@@ -244,6 +244,9 @@ class Image(object):
 		else:
 			raise RuntimeError("Wrong image type %s" % type(image))
 
+		if camera_info:
+			self._camera_info = camera_info
+
 	# ──────────
 	# Properties
 
@@ -253,11 +256,11 @@ class Image(object):
 
 	@property
 	def width(self):
-		return self.camera_info.width
+		return self._width
 
 	@property
 	def height(self):
-		return self.camera_info.height
+		return self._height
 
 	@property
 	def depth(self):
@@ -375,6 +378,66 @@ class Image(object):
 						  QImage.Format(img.colorspace.qt_code))
 			return q_im
 
+	# ──────────────────────
+	# Mono/Stereo definition
+
+	@property
+	def is_mono(self):
+		return not self.is_stereo
+
+	@property
+	def is_stereo(self):
+		return isinstance(self.camera_info, tuple)
+
+	def setIsStereo(self, camera_info_1, camera_info_2):
+		self._camera_info = (camera_info_1, camera_info_2)
+		if camera_info_1.height == camera_info_2.height == self.height:
+			# Horizontal stereo
+			self.left_image = Image(numpy.ascontiguousarray(
+			                          self.numpy_image[:,:camera_info_1.width]
+			                        ),
+			                        self.colorspace,
+			                        camera_info_1)
+			self.right_image = Image(numpy.ascontiguousarray(
+			                           self.numpy_image[:,camera_info_2.width:]
+			                         ),
+			                         self.colorspace,
+			                         camera_info_2)
+
+			if hasattr(self, "top_image"):
+				del self.top_image
+			if hasattr(self, "bottom_image"):
+				del self.bottom_image
+
+		elif camera_info_1.width == camera_info_2.width == self.width:
+			# Horizontal stereo
+			self.top_image = Image(numpy.ascontiguousarray(
+			                         self.numpy_image[:camera_info_1.height,:]
+			                       ),
+			                       self.colorspace,
+			                       camera_info_1)
+			self.bottom_image = Image(numpy.ascontiguousarray(
+			                            self.numpy_image[camera_info_2.height:,:]
+			                          ),
+			                          self.colorspace,
+			                          camera_info_2)
+
+			if hasattr(self, "left_image"):
+				del self.left_image
+			if hasattr(self, "right_image"):
+				del self.right_image
+
+	def setIsMono(self, camera_info):
+		self._camera_info = camera_info
+		if hasattr(self, "top_image"):
+			del self.top_image
+		if hasattr(self, "bottom_image"):
+			del self.bottom_image
+		if hasattr(self, "left_image"):
+			del self.left_image
+		if hasattr(self, "right_image"):
+			del self.right_image
+
 	# ────────────────────────
 	# Image-type determination
 
@@ -408,8 +471,8 @@ class Image(object):
 
 	def _loadFromALImage(self, al_image):
 		self._data = al_image[6]
-		self._camera_info._width = al_image[0]
-		self._camera_info._height = al_image[1]
+		self._width = al_image[0]
+		self._height = al_image[1]
 		self._depth = al_image[2]
 		self.colorspace = al_image[3]
 
@@ -422,8 +485,8 @@ class Image(object):
 	def _loadFromCVImage(self, cv_image, colorspace=None):
 		self._data = cv_image.data
 		self._dtype = cv_image.dtype
-		self._camera_info._width = cv_image.shape[1]
-		self._camera_info._height = cv_image.shape[0]
+		self._width = cv_image.shape[1]
+		self._height = cv_image.shape[0]
 		self._depth = 1 if len(cv_image.shape) < 3 else cv_image.shape[2]
 		if colorspace is not None:
 			self.colorspace = colorspace
@@ -447,23 +510,16 @@ class Image(object):
 		# PySide seems ok
 		# But PyQt5 prefers to have q_image.bits().asarray(width*height) or similar..
 		self._data = q_image.bits()
-		self._camera_info._width = q_image.width()
-		self._camera_info._height = q_image.height()
+		self._width = q_image.width()
+		self._height = q_image.height()
 		self._depth = q_image.depth() / 8
 		self._dtype = numpy.uint8
 
 	@staticmethod
 	def fromFilePath(path, colorspace = None):
 		i = Image()
-		if _has_CV:
-			return i._loadFromCVImage(
-			                          cv2.imread(path, cv2.IMREAD_UNCHANGED),
-			                          colorspace
-			                         )
-		elif _has_Qt:
-			return i._loadFromQImage(
-			                         QImage(path)
-			                        )
+		i.load(path, colorspace)
+		return i
 
 	# ───────────
 	# General API
@@ -610,15 +666,31 @@ class Image(object):
 
 		with XMPFile(path, rw=True) as xmp_file:
 			_raw_metadata = xmp_file.metadata[CAMERA_NS]
-			_raw_metadata.camera_info.camera_matrix = self.camera_info.camera_matrix
-			_raw_metadata.camera_info.distortion_coeffs = self.camera_info.distortion_coeffs
-			_raw_metadata.camera_info.rectification_matrix = self.camera_info.rectification_matrix
-			_raw_metadata.camera_info.projection_matrix = self.camera_info.projection_matrix
+
+			if isinstance(self.camera_info, tuple):
+				_raw_metadata.camera_info.camera_matrix = self.camera_info[0].camera_matrix
+				_raw_metadata.camera_info.distortion_coeffs = self.camera_info[0].distortion_coeffs
+				_raw_metadata.camera_info.rectification_matrix = self.camera_info[0].rectification_matrix
+				_raw_metadata.camera_info.projection_matrix = self.camera_info[0].projection_matrix
+				_raw_metadata.camera_info.width = self.camera_info[0].width
+				_raw_metadata.camera_info.height = self.camera_info[0].height
+
+				_raw_metadata.camera_info_bis.camera_matrix = self.camera_info[1].camera_matrix
+				_raw_metadata.camera_info_bis.distortion_coeffs = self.camera_info[1].distortion_coeffs
+				_raw_metadata.camera_info_bis.rectification_matrix = self.camera_info[1].rectification_matrix
+				_raw_metadata.camera_info_bis.projection_matrix = self.camera_info[1].projection_matrix
+				_raw_metadata.camera_info_bis.width = self.camera_info[1].width
+				_raw_metadata.camera_info_bis.height = self.camera_info[1].height
+			else:
+				_raw_metadata.camera_info.camera_matrix = self.camera_info.camera_matrix
+				_raw_metadata.camera_info.distortion_coeffs = self.camera_info.distortion_coeffs
+				_raw_metadata.camera_info.rectification_matrix = self.camera_info.rectification_matrix
+				_raw_metadata.camera_info.projection_matrix = self.camera_info.projection_matrix
 			_raw_metadata.colorspace = str(colorspace)
 
-	def load(self, path):
+	def load(self, path, colorspace = None):
 		if _has_CV:
-			self._loadFromCVImage(cv2.imread(path, cv2.IMREAD_UNCHANGED))
+			self._loadFromCVImage(cv2.imread(path, cv2.IMREAD_UNCHANGED), colorspace)
 		elif _has_Qt:
 			self._loadFromQImage(QImage(path))
 		else:
@@ -626,42 +698,70 @@ class Image(object):
 
 		with XMPFile(path, rw=False) as xmp_file:
 			_raw_metadata = xmp_file.metadata[CAMERA_NS]
+			print _raw_metadata.children
 			if _raw_metadata.children:
-				data = _raw_metadata.value
 				cam_info = _raw_metadata.camera_info.value
 
-				if cam_info.has_key("camera:camera_matrix"):
-					cm = _raw_metadata.camera_info.camera_matrix.value
-					for i in range(len(cm)):
-						for j in range(len(cm[i])):
-							cm[i][j] = float(cm[i][j])
-					self.camera_info._camera_matrix = cm
+				_a = self._loadCameraInfoFromXMP(cam_info, _raw_metadata.camera_info)
 
-				if cam_info.has_key("camera:distortion_coeffs"):
-					cm = _raw_metadata.camera_info.distortion_coeffs.value
-					for i in range(len(cm)):
-						cm[i] = float(cm[i])
-					self.camera_info._distortion_coeffs = cm
-
-				if cam_info.has_key("camera:rectification_matrix"):
-					cm = _raw_metadata.camera_info.rectification_matrix.value
-					for i in range(len(cm)):
-						for j in range(len(cm[i])):
-							cm[i][j] = float(cm[i][j])
-					self.camera_info._rectification_matrix = cm
-
-				if cam_info.has_key("camera:projection_matrix"):
-					cm = _raw_metadata.camera_info.projection_matrix.value
-					for i in range(len(cm)):
-						for j in range(len(cm[i])):
-							cm[i][j] = float(cm[i][j])
-					self.camera_info._projection_matrix = cm
+				if "camera:camera_info_bis" in _raw_metadata.children:
+					cam_info_bis = _raw_metadata.camera_info_bis.value
+					_b = self._loadCameraInfoFromXMP(cam_info_bis, _raw_metadata.camera_info_bis)
+					self.setIsStereo(_a,_b)
+				else:
+					self.setIsMono(_a)
+					self.camera_info.setWidth(self.width)
+					self.camera_info.setHeight(self.height)
 
 				self.colorspace = Colorspace(_raw_metadata.colorspace.value)
 
+
+	def _loadCameraInfoFromXMP(self, cam_info, _raw_camera_info):
+		camera_info = CameraInfo()
+
+		if cam_info.has_key("camera:width"):
+			camera_info.setWidth(int(_raw_camera_info.width.value))
+
+		if cam_info.has_key("camera:height"):
+			camera_info.setHeight(int(_raw_camera_info.height.value))
+
+		if cam_info.has_key("camera:projection_matrix"):
+			cm = _raw_camera_info.projection_matrix.value
+			for i in range(len(cm)):
+				for j in range(len(cm[i])):
+					cm[i][j] = float(cm[i][j])
+			camera_info.setProjectionMatrix(cm)
+
+		if cam_info.has_key("camera:camera_matrix"):
+			cm = _raw_camera_info.camera_matrix.value
+			for i in range(len(cm)):
+				for j in range(len(cm[i])):
+					cm[i][j] = float(cm[i][j])
+			camera_info.setCameraMatrix(cm)
+
+		if cam_info.has_key("camera:distortion_coeffs"):
+			cm = _raw_camera_info.distortion_coeffs.value
+			for i in range(len(cm)):
+				cm[i] = float(cm[i])
+			camera_info.setDistortionCoeffs(cm)
+
+		if cam_info.has_key("camera:rectification_matrix"):
+			cm = _raw_camera_info.rectification_matrix.value
+			for i in range(len(cm)):
+				for j in range(len(cm[i])):
+					cm[i][j] = float(cm[i][j])
+			camera_info.setRectificationMatrix(cm)
+
+		if cam_info.has_key("camera:projection_matrix"):
+			cm = _raw_camera_info.projection_matrix.value
+			for i in range(len(cm)):
+				for j in range(len(cm[i])):
+					cm[i][j] = float(cm[i][j])
+			camera_info.setProjectionMatrix(cm)
+		return camera_info
+
 	# ──────────────
 	# Textualization
-
 
 class CameraInfo(object):
 
@@ -669,9 +769,15 @@ class CameraInfo(object):
 	def width(self):
 		return getattr(self,"_width",0)
 
+	def setWidth(self, width):
+		self._width = width
+
 	@property
 	def height(self):
 		return getattr(self,"_height",0)
+
+	def setHeight(self, height):
+		self._height = height
 
 	@property
 	def camera_matrix(self):
@@ -684,11 +790,24 @@ class CameraInfo(object):
 			self._camera_matrix = cm
 		return copy.deepcopy(self._camera_matrix)
 
+	def setCameraMatrix(self, camera_matrix):
+		assert(3 == len(camera_matrix))
+		assert(3 == len(camera_matrix[0]))
+		assert(3 == len(camera_matrix[1]))
+		assert(3 == len(camera_matrix[2]))
+		self._camera_matrix = camera_matrix
+
 	@property
 	def distortion_coeffs(self):
 		if not hasattr(self, "_distortion_coeffs"):
 			self._distortion_coeffs = []
 		return copy.deepcopy(self._distortion_coeffs)
+
+	def setDistortionCoeffs(self, distortion_coeffs):
+		assert(isinstance(distortion_coeffs, list))
+		for i in distortion_coeffs:
+			assert(isinstance(i, (float,int)))
+		self._distortion_coeffs = distortion_coeffs
 
 	@property
 	def rectification_matrix(self):
@@ -699,6 +818,13 @@ class CameraInfo(object):
 			    [0.0, 0.0, 1.0],
 			]
 		return copy.deepcopy(self._rectification_matrix)
+
+	def setRectificationMatrix(self, rectification_matrix):
+		assert(3 == len(rectification_matrix))
+		assert(3 == len(rectification_matrix[0]))
+		assert(3 == len(rectification_matrix[1]))
+		assert(3 == len(rectification_matrix[2]))
+		self._rectification_matrix = rectification_matrix
 
 	@property
 	def projection_matrix(self):
@@ -712,6 +838,13 @@ class CameraInfo(object):
 			self._projection_matrix[1][0:3] = self.camera_matrix[1]
 			self._projection_matrix[2][0:3] = self.camera_matrix[2]
 		return copy.deepcopy(self._projection_matrix)
+
+	def setProjectionMatrix(self, projection_matrix):
+		assert(3 == len(projection_matrix))
+		assert(4 == len(projection_matrix[0]))
+		assert(4 == len(projection_matrix[1]))
+		assert(4 == len(projection_matrix[2]))
+		self._projection_matrix = projection_matrix
 
 def similarCVImage(cv_image):
 	return numpy.empty(cv_image.shape, cv_image.dtype)

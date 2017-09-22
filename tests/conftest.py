@@ -32,6 +32,7 @@ DEPTH_PHOTO = "depth.png"
 GRAY_PHOTO = "top.png"
 COLOR_PHOTO = "SpringNebula.jpg"
 LEFT_PHOTO = "left.png"
+STEREO_PHOTO = "stereo.png"
 
 #[MODULE CONTENT]--------------------------------------------------------------
 
@@ -83,3 +84,7 @@ def left_file_path():
 @pytest.fixture(scope="function")
 def depth_file_path():
 	return sandboxed(DEPTH_PHOTO)
+
+@pytest.fixture(scope="function")
+def stereo_file_path():
+	return sandboxed(STEREO_PHOTO)
