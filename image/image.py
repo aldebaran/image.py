@@ -719,7 +719,6 @@ class Image(object):
 
 		with XMPFile(path, rw=False) as xmp_file:
 			_raw_metadata = xmp_file.metadata[CAMERA_NS]
-			print _raw_metadata.children
 			if _raw_metadata.children:
 				cam_info = _raw_metadata.camera_info.value
 
