@@ -390,8 +390,8 @@ class Image(object):
 		return isinstance(self.camera_info, tuple)
 
 	def setIsStereo(self, camera_info_1, camera_info_2):
-		self._camera_info = (camera_info_1, camera_info_2)
-		if camera_info_1.height == camera_info_2.height == self.height:
+		if camera_info_1.height == camera_info_2.height == self.height\
+		   and camera_info_1.width + camera_info_2.width == self.width:
 			# Horizontal stereo
 			self.left_image = Image(numpy.ascontiguousarray(
 			                          self.numpy_image[:,:camera_info_1.width]
@@ -409,8 +409,10 @@ class Image(object):
 			if hasattr(self, "bottom_image"):
 				del self.bottom_image
 
-		elif camera_info_1.width == camera_info_2.width == self.width:
-			# Horizontal stereo
+		elif camera_info_1.width == camera_info_2.width == self.width\
+		     and camera_info_1.height + camera_info_2.height == self.height:
+
+			# Vertical stereo
 			self.top_image = Image(numpy.ascontiguousarray(
 			                         self.numpy_image[:camera_info_1.height,:]
 			                       ),
@@ -426,6 +428,22 @@ class Image(object):
 				del self.left_image
 			if hasattr(self, "right_image"):
 				del self.right_image
+
+		else:
+			msg = "Images given sizes ((%d,%d) and (%d,%d))"
+			msg +=" don't match original image size (%d,%d)"
+			raise RuntimeError(
+			    msg%(
+			        camera_info_1.width,
+			        camera_info_1.height,
+			        camera_info_2.width,
+			        camera_info_2.height,
+			        self.width,
+			        self.height,
+			    )
+			)
+
+		self._camera_info = (camera_info_1, camera_info_2)
 
 	def setIsMono(self, camera_info):
 		self._camera_info = camera_info

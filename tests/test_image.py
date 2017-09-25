@@ -172,5 +172,20 @@ def test_image_stereo(stereo_file_path):
 	assert(not hasattr(i_stereo, "top_image"))
 	assert(not hasattr(i_stereo, "bottom_image"))
 
-	# assert(hasaatr(i_stereo, "left_image"))
-	# i_stereo.camera_info
+	# Give bad camera infos
+	bad_left_cam_info = CameraInfo()
+	bad_right_cam_info = CameraInfo()
+	bad_top_cam_info = CameraInfo()
+	bad_bottom_cam_info = CameraInfo()
+
+	with pytest.raises(RuntimeError) as _e:
+		i_stereo.setIsStereo(bad_top_cam_info, bad_bottom_cam_info)
+	assert("Images given sizes ((0,0) and (0,0)) don't match original image size (2560,720)"\
+	        == _e.value.message)
+	assert(i_stereo.is_mono)
+
+	with pytest.raises(RuntimeError) as _e:
+		i_stereo.setIsStereo(bad_left_cam_info, bad_right_cam_info)
+	assert("Images given sizes ((0,0) and (0,0)) don't match original image size (2560,720)"\
+	        == _e.value.message)
+	assert(i_stereo.is_mono)
