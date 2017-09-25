@@ -37,6 +37,7 @@ setup(
         "numpy >= 1.8.0",
         "Qt.py >= 1.0.0",
         "xmp >= 0.3",
+        "PyYaml >= 3.11"
     ],
     package_data={"image":["VERSION"]},
 )

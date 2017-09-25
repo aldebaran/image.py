@@ -33,6 +33,7 @@ GRAY_PHOTO = "top.png"
 COLOR_PHOTO = "SpringNebula.jpg"
 LEFT_PHOTO = "left.png"
 STEREO_PHOTO = "stereo.png"
+CALIBRATION = "calibration_liov4689_left.yml"
 
 #[MODULE CONTENT]--------------------------------------------------------------
 
@@ -88,3 +89,7 @@ def depth_file_path():
 @pytest.fixture(scope="function")
 def stereo_file_path():
 	return sandboxed(STEREO_PHOTO)
+
+@pytest.fixture(scope="function")
+def calibration_file_path():
+	return sandboxed(CALIBRATION)

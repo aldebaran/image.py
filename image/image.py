@@ -34,6 +34,9 @@ except ImportError:
 	_has_Qt = False
 from xmp.xmp import XMPFile, registerNamespace
 
+# Local modules
+from cv_py_yaml import _loadCalibrationFile
+
 CAMERA_NS=u"http://softbank-robotics.com/camera/1"
 registerNamespace(CAMERA_NS, "camera")
 
@@ -783,6 +786,23 @@ class Image(object):
 
 class CameraInfo(object):
 
+	@staticmethod
+	def fromNaoqiCalibrationFile(calibration_file_path):
+		cal_data = _loadCalibrationFile(calibration_file_path)
+		out = CameraInfo()
+		out.setWidth(cal_data["width"])
+		out.setHeight(cal_data["height"])
+		out.setCameraMatrix(cal_data["cameraMatrix"])
+		out.setRectificationMatrix(cal_data["rectificationMatrix"])
+		out.setProjectionMatrix(cal_data["projectionMatrix"])
+		# distortion coeff is a vector, but is stored as a matrix of one line
+		# and some columns. Only keep the interesting dimension
+		if len(1 == cal_data["distortion"]):
+			out.setDistortionCoeffs(cal_data["distortion"][0])
+		else:
+			out.setDistortionCoeffs(cal_data["distortion"])
+		return out
+
 	@property
 	def width(self):
 		return getattr(self,"_width",0)
@@ -800,69 +820,54 @@ class CameraInfo(object):
 	@property
 	def camera_matrix(self):
 		if not hasattr(self, "_camera_matrix"):
-			cm = [
+			cm = numpy.array([
 			  [1.0,    0.0,  float(self.width-1)/2.0],
 			  [0.0,    1.0, float(self.height-1)/2.0],
 			  [0.0,    0.0,           1.0           ],
-			]
+			])
 			self._camera_matrix = cm
-		return copy.deepcopy(self._camera_matrix)
+		return self._camera_matrix.tolist()
 
 	def setCameraMatrix(self, camera_matrix):
-		assert(3 == len(camera_matrix))
-		assert(3 == len(camera_matrix[0]))
-		assert(3 == len(camera_matrix[1]))
-		assert(3 == len(camera_matrix[2]))
-		self._camera_matrix = camera_matrix
+		numpy_cm = numpy.array(camera_matrix)
+		assert((3,3) == numpy_cm.shape)
+		self._camera_matrix = numpy_cm
 
 	@property
 	def distortion_coeffs(self):
 		if not hasattr(self, "_distortion_coeffs"):
-			self._distortion_coeffs = []
-		return copy.deepcopy(self._distortion_coeffs)
+			self._distortion_coeffs = numpy.array([])
+		return self._distortion_coeffs.tolist()
 
 	def setDistortionCoeffs(self, distortion_coeffs):
-		assert(isinstance(distortion_coeffs, list))
-		for i in distortion_coeffs:
-			assert(isinstance(i, (float,int)))
-		self._distortion_coeffs = distortion_coeffs
+		numpy_dc = numpy.array(distortion_coeffs)
+		assert(1 == len(numpy_dc.shape))
+		self._distortion_coeffs = numpy_dc
 
 	@property
 	def rectification_matrix(self):
 		if not hasattr(self, "_rectification_matrix"):
-			self._rectification_matrix = [
-			    [1.0, 0.0, 0.0],
-			    [0.0, 1.0, 0.0],
-			    [0.0, 0.0, 1.0],
-			]
-		return copy.deepcopy(self._rectification_matrix)
+			self._rectification_matrix = numpy.eye(3)
+		return self._rectification_matrix.tolist()
 
 	def setRectificationMatrix(self, rectification_matrix):
-		assert(3 == len(rectification_matrix))
-		assert(3 == len(rectification_matrix[0]))
-		assert(3 == len(rectification_matrix[1]))
-		assert(3 == len(rectification_matrix[2]))
-		self._rectification_matrix = rectification_matrix
+		numpy_rm = numpy.array(rectification_matrix)
+		assert((3,3) == numpy_rm.shape)
+		self._rectification_matrix = numpy_rm
 
 	@property
 	def projection_matrix(self):
 		if not hasattr(self, "_projection_matrix"):
-			self._projection_matrix = [
-			    [0.0, 0.0, 0.0, 0.0],
-			    [0.0, 0.0, 0.0, 0.0],
-			    [0.0, 0.0, 0.0, 0.0],
-			]
-			self._projection_matrix[0][0:3] = self.camera_matrix[0]
-			self._projection_matrix[1][0:3] = self.camera_matrix[1]
-			self._projection_matrix[2][0:3] = self.camera_matrix[2]
-		return copy.deepcopy(self._projection_matrix)
+			self._projection_matrix = numpy.zeros((3,4))
+			self._projection_matrix[0][0:3] = self._camera_matrix[0]
+			self._projection_matrix[1][0:3] = self._camera_matrix[1]
+			self._projection_matrix[2][0:3] = self._camera_matrix[2]
+		return self._projection_matrix.tolist()
 
 	def setProjectionMatrix(self, projection_matrix):
-		assert(3 == len(projection_matrix))
-		assert(4 == len(projection_matrix[0]))
-		assert(4 == len(projection_matrix[1]))
-		assert(4 == len(projection_matrix[2]))
-		self._projection_matrix = projection_matrix
+		numpy_pm = numpy.array(projection_matrix)
+		assert((3,4) == numpy_pm.shape)
+		self._projection_matrix = numpy_pm
 
 def similarCVImage(cv_image):
 	return numpy.empty(cv_image.shape, cv_image.dtype)

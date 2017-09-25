@@ -97,7 +97,7 @@ def test_image_camera_matrix_set(left_file_path):
 
 	i_left.camera_info._camera_matrix[0][0] = 10.0
 	assert(10.0 == i_left.camera_info.camera_matrix[0][0])
-	i_left.camera_info._distortion_coeffs.append(-0.1)
+	i_left.camera_info.setDistortionCoeffs([-0.1])
 	assert(-0.1 == i_left.camera_info.distortion_coeffs[0])
 	i_left.save(left_file_path)
 
@@ -189,3 +189,67 @@ def test_image_stereo(stereo_file_path):
 	assert("Images given sizes ((0,0) and (0,0)) don't match original image size (2560,720)"\
 	        == _e.value.message)
 	assert(i_stereo.is_mono)
+
+def test_load_camera_info_from_naoqi_file(calibration_file_path):
+	info_from_cal_file = CameraInfo.fromNaoqiCalibrationFile(calibration_file_path)
+
+	def isclose(a, b, rel_tol=1e-08, abs_tol=0.0):
+		return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
+
+	def is_equal(a,b):
+		if len(a) != len(b):
+			return False
+		for i in range(len(a)):
+			if isinstance(a[i], list):
+				if not is_equal(a[i],b[i]):
+					return False
+			else:
+				if not isclose(a[i], b[i]):
+					print a[i], b[i], abs(a[i]-b[i]), 1e-09 * max(abs(a[i]), abs(b[i]))
+					return False
+		return True
+
+	assert(1280 == info_from_cal_file.width)
+	assert(720 == info_from_cal_file.height)
+	assert(
+	    is_equal(
+	        [
+	            [6.96196228e+02, 0., 6.50011292e+02],
+	            [0., 6.99801025e+02, 3.68380310e+02],
+	            [0., 0., 1.]
+	        ],
+	        info_from_cal_file.camera_matrix
+	    )
+	)
+	assert(
+	    is_equal(
+	        [
+	            -1.63907841e-01,
+	            9.65181086e-03,
+	            -3.43979977e-04,
+	            -8.26001575e-04,
+	            1.07839936e-02
+	        ],
+	        info_from_cal_file.distortion_coeffs
+	    )
+	)
+	assert(
+	    is_equal(
+	        [
+	            [9.84224379e-01, 5.37100509e-02, -1.68575093e-01],
+	            [-5.43872640e-02, 9.98519719e-01, 6.00773201e-04],
+	            [1.68357834e-01, 8.57704226e-03, 9.85688627e-01]
+	        ],
+	        info_from_cal_file.rectification_matrix
+	    )
+	)
+	assert(
+	    is_equal(
+	        [
+	            [5.73509216e+02, 0., 8.86482422e+02, 0.],
+	            [0., 5.73509216e+02, 3.82152710e+02, 0.],
+	            [0., 0., 1., 0.]
+	        ],
+	        info_from_cal_file.projection_matrix
+	    )
+	)
