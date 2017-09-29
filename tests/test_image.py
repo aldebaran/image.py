@@ -148,11 +148,11 @@ def test_image_stereo(stereo_file_path):
 	mono_cam_info.setWidth(2560)
 	mono_cam_info.setHeight(720)
 	left_cam_info = CameraInfo()
-	left_cam_info.setWidth(1280)
-	left_cam_info.setHeight(720)
+	left_cam_info.setWidth(2560)
+	left_cam_info.setHeight(1440)
 	right_cam_info = CameraInfo()
-	right_cam_info.setWidth(1280)
-	right_cam_info.setHeight(720)
+	right_cam_info.setWidth(2560)
+	right_cam_info.setHeight(1440)
 	top_cam_info = CameraInfo()
 	top_cam_info.setWidth(2560)
 	top_cam_info.setHeight(360)
@@ -182,10 +182,10 @@ def test_image_stereo(stereo_file_path):
 	i_stereo.save(stereo_file_path)
 
 	i_stereo = Image(stereo_file_path)
-	assert(1280 == i_stereo.camera_info[0].width)
-	assert(720 == i_stereo.camera_info[0].height)
-	assert(1280 == i_stereo.camera_info[1].width)
-	assert(720 == i_stereo.camera_info[1].height)
+	assert(2560 == i_stereo.camera_info[0].width)
+	assert(1440 == i_stereo.camera_info[0].height)
+	assert(2560 == i_stereo.camera_info[1].width)
+	assert(1440 == i_stereo.camera_info[1].height)
 	assert(2560 == i_stereo.width)
 	assert(720 == i_stereo.height)
 	assert(hasattr(i_stereo, "left_image"))
@@ -201,19 +201,27 @@ def test_image_stereo(stereo_file_path):
 
 	# Give bad camera infos
 	bad_left_cam_info = CameraInfo()
+	bad_left_cam_info.setWidth(10)
+	bad_left_cam_info.setHeight(10)
 	bad_right_cam_info = CameraInfo()
+	bad_right_cam_info.setWidth(10)
+	bad_right_cam_info.setHeight(10)
 	bad_top_cam_info = CameraInfo()
+	bad_top_cam_info.setWidth(10)
+	bad_top_cam_info.setHeight(10)
 	bad_bottom_cam_info = CameraInfo()
+	bad_bottom_cam_info.setWidth(10)
+	bad_bottom_cam_info.setHeight(10)
 
 	with pytest.raises(RuntimeError) as _e:
 		i_stereo.setIsStereo(bad_top_cam_info, bad_bottom_cam_info)
-	assert("Images given sizes ((0,0) and (0,0)) don't match original image size (2560,720)"\
+	assert("Images given sizes ((10,10) and (10,10)) don't match original image size (2560,720)"\
 	        == _e.value.message)
 	assert(i_stereo.is_mono)
 
 	with pytest.raises(RuntimeError) as _e:
 		i_stereo.setIsStereo(bad_left_cam_info, bad_right_cam_info)
-	assert("Images given sizes ((0,0) and (0,0)) don't match original image size (2560,720)"\
+	assert("Images given sizes ((10,10) and (10,10)) don't match original image size (2560,720)"\
 	        == _e.value.message)
 	assert(i_stereo.is_mono)
 

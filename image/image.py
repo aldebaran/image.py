@@ -417,16 +417,20 @@ class Image(object):
 		return isinstance(self.camera_info, tuple)
 
 	def setIsStereo(self, camera_info_1, camera_info_2):
-		if camera_info_1.height == camera_info_2.height == self.height\
-		   and camera_info_1.width + camera_info_2.width == self.width:
+		if camera_info_1.height == camera_info_2.height\
+		   and camera_info_1.height * self.width\
+		        == self.height*(camera_info_1.width+camera_info_2.width):
+
 			# Horizontal stereo
+			width_1 = int(camera_info_1.width*self.height/float(camera_info_1.height))
+			width_2 = int(camera_info_2.width*self.height/float(camera_info_2.height))
 			self.left_image = Image(numpy.ascontiguousarray(
-			                          self.numpy_image[:,:camera_info_1.width]
+			                          self.numpy_image[:,:width_1]
 			                        ),
 			                        self.colorspace,
 			                        camera_info_1)
 			self.right_image = Image(numpy.ascontiguousarray(
-			                           self.numpy_image[:,camera_info_2.width:]
+			                           self.numpy_image[:,width_2:]
 			                         ),
 			                         self.colorspace,
 			                         camera_info_2)
@@ -436,17 +440,20 @@ class Image(object):
 			if hasattr(self, "bottom_image"):
 				del self.bottom_image
 
-		elif camera_info_1.width == camera_info_2.width == self.width\
-		     and camera_info_1.height + camera_info_2.height == self.height:
+		elif camera_info_1.width == camera_info_2.width\
+		     and camera_info_1.width * self.height\
+		         == self.width*(camera_info_1.height+camera_info_2.height):
 
 			# Vertical stereo
+			height_1 = int(camera_info_1.height*self.width/float(camera_info_1.width))
+			height_2 = int(camera_info_2.height*self.width/float(camera_info_2.width))
 			self.top_image = Image(numpy.ascontiguousarray(
-			                         self.numpy_image[:camera_info_1.height,:]
+			                         self.numpy_image[:height_1,:]
 			                       ),
 			                       self.colorspace,
 			                       camera_info_1)
 			self.bottom_image = Image(numpy.ascontiguousarray(
-			                            self.numpy_image[camera_info_2.height:,:]
+			                            self.numpy_image[height_2:,:]
 			                          ),
 			                          self.colorspace,
 			                          camera_info_2)
@@ -473,6 +480,9 @@ class Image(object):
 		self._camera_info = (camera_info_1, camera_info_2)
 
 	def setIsMono(self, camera_info):
+		# Make sure the aspect ratio is correct
+		assert(camera_info.height * self.width == self.height*camera_info.width)
+
 		self._camera_info = camera_info
 		if hasattr(self, "top_image"):
 			del self.top_image
@@ -731,6 +741,8 @@ class Image(object):
 				_raw_metadata.camera_info.distortion_coeffs = self.camera_info.distortion_coeffs
 				_raw_metadata.camera_info.rectification_matrix = self.camera_info.rectification_matrix
 				_raw_metadata.camera_info.projection_matrix = self.camera_info.projection_matrix
+				_raw_metadata.camera_info.width = self.camera_info.width
+				_raw_metadata.camera_info.height = self.camera_info.height
 			_raw_metadata.colorspace = str(colorspace)
 
 	def load(self, path, colorspace = None):
@@ -754,8 +766,12 @@ class Image(object):
 					self.setIsStereo(_a,_b)
 				else:
 					self.setIsMono(_a)
-					self.camera_info.setWidth(self.width)
-					self.camera_info.setHeight(self.height)
+					# This is useless for new images
+					# but images previsouly created won't have any "width" or "height" stored
+					if 0 == self.camera_info.width:
+						self.camera_info.setWidth(self.width)
+					if 0 == self.camera_info.height:
+						self.camera_info.setHeight(self.height)
 
 				self.colorspace = Colorspace(_raw_metadata.colorspace.value)
 
