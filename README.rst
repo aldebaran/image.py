@@ -24,6 +24,7 @@ First, you need to install xmp (which can also only be installed from sources)::
 	pip install dist/*
 
 Then install image.py::
+
 	git clone https://github.com/aldebaran/image.py.git
 	cd image.py
 	python setup.py bdist_wheel
