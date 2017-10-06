@@ -2,4 +2,7 @@
 .cache
 .coverage
 .tox
+build/*
 coverage
+dist/*
+*.egg-info
